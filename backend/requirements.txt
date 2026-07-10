@@ -2,6 +2,7 @@ fastapi>=0.110.0
 uvicorn>=0.28.0
 sqlalchemy>=2.0.28
 aiosqlite>=0.20.0
+greenlet>=3.0.0
 pydantic>=2.6.4
 alembic>=1.13.1
 pytest>=8.1.1
