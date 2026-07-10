@@ -1,10 +1,10 @@
 # Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
 backend/.venv/
-backend/__pycache__/
-backend/*.pyc
-backend/*.pyo
-backend/*.pyd
-backend/.pytest_cache/
 backend/duolingo.db
 backend/duolingo.db-wal
 backend/duolingo.db-shm
