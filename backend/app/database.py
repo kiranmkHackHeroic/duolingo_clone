@@ -5,7 +5,7 @@ from typing import AsyncGenerator
 import os
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./duolingo.db")
 
-# Create async engine
+# SQLite connections require check_same_thread disabled for multi-threaded async execution
 connect_args = {}
 if DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
@@ -16,7 +16,7 @@ engine = create_async_engine(
     echo=False,
 )
 
-# Enable SQLite WAL (Write-Ahead Logging) Mode for production concurrency
+# SQLite pragmas to optimize database performance/concurrency in production
 if DATABASE_URL.startswith("sqlite"):
     @event.listens_for(engine.sync_engine, "connect")
     def set_sqlite_pragma(dbapi_connection, connection_record):
@@ -25,14 +25,13 @@ if DATABASE_URL.startswith("sqlite"):
         cursor.execute("PRAGMA synchronous=NORMAL")
         cursor.close()
 
-# Async session maker
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
     class_=AsyncSession,
     expire_on_commit=False,
 )
 
-# DB dependency for routers
+# FastAPI context dependency
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         yield session

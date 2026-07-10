@@ -14,13 +14,13 @@ router = APIRouter(prefix="/api/path", tags=["path"])
 
 @router.get("", response_model=CourseSchema)
 async def get_learning_path(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # 1. Fetch user progress to find active course ID
+    # Find what course the user is currently learning (default to Spanish / ID 1)
     from app.models.user import UserProgress
     prog_result = await db.execute(select(UserProgress).where(UserProgress.user_id == current_user.id))
     user_prog = prog_result.scalar_one_or_none()
     active_course_id = user_prog.active_course_id if (user_prog and user_prog.active_course_id) else 1
 
-    # 2. Fetch active course with units and skills
+    # Load active course structure (units -> skills)
     result = await db.execute(
         select(Course)
         .where(Course.id == active_course_id)
@@ -32,14 +32,14 @@ async def get_learning_path(db: AsyncSession = Depends(get_db), current_user: Us
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
 
-    # 2. Fetch user's skill progress
+    # Load current user progress records for this course
     progress_result = await db.execute(
         select(UserSkillProgress).where(UserSkillProgress.user_id == current_user.id)
     )
     progress_list = progress_result.scalars().all()
     progress_map = {p.skill_id: p for p in progress_list}
 
-    # 3. Track completed skill IDs to calculate unlock status
+    # Map completed skill IDs to verify lock/unlock dependencies of subsequent skills
     completed_skills = {
         p.skill_id for p in progress_list if p.status == "completed" or p.crowns >= 1
     }

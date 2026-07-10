@@ -37,13 +37,13 @@ async def select_course(
   db: AsyncSession = Depends(get_db),
   current_user: User = Depends(get_current_user)
 ):
-  # 1. Verify course exists
+  # Check if the requested course exists
   course_result = await db.execute(select(Course).where(Course.id == req.course_id))
   course = course_result.scalar_one_or_none()
   if not course:
     raise HTTPException(status_code=404, detail="Course not found")
 
-  # 2. Update active course in UserProgress
+  # Update the active course ID in user progress
   prog_result = await db.execute(select(UserProgress).where(UserProgress.user_id == current_user.id))
   progress = prog_result.scalar_one_or_none()
   if not progress:
@@ -51,8 +51,8 @@ async def select_course(
 
   progress.active_course_id = req.course_id
 
-  # 3. Check if user already has progress in this course
-  # We query UserSkillProgress for skills belonging to the selected course
+  # If this is the user's first time selecting this course, initialize progress for it.
+  # We check if they have any UserSkillProgress records for skills in this course.
   usp_result = await db.execute(
     select(UserSkillProgress)
     .join(Skill)
@@ -62,8 +62,7 @@ async def select_course(
   has_progress = (len(usp_result.scalars().all()) > 0)
 
   if not has_progress:
-    # Seed the first skill of Unit 1 as "available"
-    # Find the skill with the minimum order_index in Unit 1 for this course
+    # Unlock the first skill in Unit 1 as the starting point
     first_skill_result = await db.execute(
       select(Skill)
       .join(Unit)

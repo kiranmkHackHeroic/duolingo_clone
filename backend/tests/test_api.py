@@ -17,7 +17,8 @@ import uuid
 
 def test_auth_flow_and_protected_access():
     username = f"tester_{uuid.uuid4().hex[:8]}"
-    # 1. Register a new user
+    
+    # Try registration
     reg_res = client.post(
         "/api/auth/register",
         json={
@@ -32,7 +33,7 @@ def test_auth_flow_and_protected_access():
     token = reg_data["access_token"]
     assert reg_data["username"] == username
 
-    # 2. Test login with correct password
+    # Try login with valid credentials
     login_res = client.post(
         "/api/auth/login",
         json={
@@ -43,7 +44,7 @@ def test_auth_flow_and_protected_access():
     assert login_res.status_code == 200
     assert "access_token" in login_res.json()
 
-    # 3. Test login with incorrect password
+    # Verify invalid passwords are rejected
     bad_login_res = client.post(
         "/api/auth/login",
         json={
@@ -53,7 +54,7 @@ def test_auth_flow_and_protected_access():
     )
     assert bad_login_res.status_code == 401
 
-    # 4. Access protected learning path
+    # Fetch learning path using our JWT authorization header
     headers = {"Authorization": f"Bearer {token}"}
     path_res = client.get("/api/path", headers=headers)
     assert path_res.status_code == 200
@@ -61,7 +62,7 @@ def test_auth_flow_and_protected_access():
     assert path_data["name"] == "Spanish"
     assert len(path_data["units"]) > 0
 
-    # 5. Access exercise evaluation with token
+    # Verify answer evaluation endpoint
     res = client.post(
         "/api/exercises/1/answer",
         json={"answer": {"index": 0}},
@@ -71,7 +72,6 @@ def test_auth_flow_and_protected_access():
     assert res.json()["correct"] is True
 
 def test_courses_selection():
-    # Register and get token
     import uuid
     username = f"course_tester_{uuid.uuid4().hex[:8]}"
     reg_res = client.post(
@@ -86,13 +86,13 @@ def test_courses_selection():
     token = reg_res.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    # 1. Fetch courses list
+    # Retrieve lists of languages we support
     courses_res = client.get("/api/courses", headers=headers)
     assert courses_res.status_code == 200
     courses = courses_res.json()
     assert len(courses) >= 3 # Spanish, French, German
     
-    # 2. Select course 2 (French)
+    # Try selecting French as active language
     select_res = client.post(
         "/api/courses/select",
         json={"course_id": 2},

@@ -24,7 +24,7 @@ class TokenResponse(BaseModel):
 
 @router.post("/register", response_model=TokenResponse)
 async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    # 1. Check if user already exists
+    # Make sure username isn't already taken
     existing_result = await db.execute(select(User).where(User.username == req.username))
     existing = existing_result.scalar_one_or_none()
     if existing:
@@ -33,7 +33,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
             detail="Username already taken"
         )
 
-    # 2. Create User
+    # Hash password and create user record
     new_user = User(
         username=req.username,
         display_name=req.display_name,
@@ -41,9 +41,9 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         avatar_url=f"https://api.dicebear.com/7.x/adventurer/svg?seed={req.username}"
     )
     db.add(new_user)
-    await db.flush() # Populate new_user.id
+    await db.flush() # flush to get the user ID for relationships
 
-    # 3. Create default progress
+    # Initialize default starting stats for the user
     default_progress = UserProgress(
         user_id=new_user.id,
         total_xp=0,
@@ -58,7 +58,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     )
     db.add(default_progress)
 
-    # 4. Create default leaderboard entry
+    # Initialize bronze league leaderboard entry
     default_lb = LeaderboardEntry(
         user_id=new_user.id,
         league="bronze",
@@ -68,7 +68,6 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
     await db.commit()
 
-    # 5. Generate token
     token = create_access_token(data={"sub": req.username})
     
     return TokenResponse(
@@ -79,7 +78,6 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
-    # 1. Fetch user
     result = await db.execute(select(User).where(User.username == req.username))
     user = result.scalar_one_or_none()
     if not user:
@@ -88,14 +86,13 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
             detail="Incorrect username or password"
         )
 
-    # 2. Verify password
+    # Check password match
     if not verify_password(req.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password"
         )
 
-    # 3. Generate token
     token = create_access_token(data={"sub": req.username})
 
     return TokenResponse(

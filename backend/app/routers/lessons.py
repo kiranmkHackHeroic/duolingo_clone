@@ -57,7 +57,7 @@ async def get_lesson(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # 1. Fetch user progress to check hearts
+    # Check user hearts first
     prog_result = await db.execute(select(UserProgress).where(UserProgress.user_id == current_user.id))
     progress = prog_result.scalar_one_or_none()
     if not progress:
@@ -66,7 +66,7 @@ async def get_lesson(
     if progress.hearts <= 0:
         raise HTTPException(status_code=403, detail="heart_empty")
 
-    # 2. Fetch skill details
+    # Fetch skill details and check if it exists
     skill_result = await db.execute(
         select(Skill)
         .where(Skill.id == skill_id)
@@ -76,7 +76,7 @@ async def get_lesson(
     if not skill:
         raise HTTPException(status_code=404, detail="Skill not found")
 
-    # 3. Check requirements
+    # Verify user has met prerequisite skills
     if skill.required_skill_id is not None:
         req_progress = await db.execute(
             select(UserSkillProgress)
@@ -86,7 +86,7 @@ async def get_lesson(
         if not req_prog or req_prog.status != "completed":
             raise HTTPException(status_code=403, detail="Skill is locked")
 
-    # 4. Fetch or create user skill progress
+    # Initialize progress record for this skill if it doesn't exist
     usp_result = await db.execute(
         select(UserSkillProgress)
         .where(UserSkillProgress.user_id == current_user.id, UserSkillProgress.skill_id == skill_id)
@@ -97,7 +97,7 @@ async def get_lesson(
         db.add(usp)
         await db.flush()
 
-    # 5. Determine which lesson to serve
+    # Determine which lesson to serve based on number of completed lessons
     lesson_idx = usp.lessons_completed
     target_idx = (lesson_idx % len(skill.lessons)) if skill.lessons else 0
     
@@ -107,7 +107,7 @@ async def get_lesson(
         
     lesson = lessons_sorted[target_idx]
 
-    # 6. Fetch exercises for this lesson
+    # Fetch exercises belonging to this lesson
     ex_result = await db.execute(
         select(Exercise)
         .where(Exercise.lesson_id == lesson.id)
@@ -138,7 +138,7 @@ async def check_answer(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # 1. Check user hearts
+    # Check if user has hearts left to spend on this answer check
     prog_result = await db.execute(select(UserProgress).where(UserProgress.user_id == current_user.id))
     progress = prog_result.scalar_one_or_none()
     if not progress:
@@ -147,13 +147,13 @@ async def check_answer(
     if progress.hearts <= 0:
         raise HTTPException(status_code=403, detail="heart_empty")
 
-    # 2. Fetch exercise
+    # Fetch targeted exercise details
     ex_result = await db.execute(select(Exercise).where(Exercise.id == id))
     exercise = ex_result.scalar_one_or_none()
     if not exercise:
         raise HTTPException(status_code=404, detail="Exercise not found")
 
-    # 3. Evaluate answer
+    # Evaluate the correctness of user input based on exercise type
     is_correct = False
     answer = req.answer
     correct_answer = exercise.correct_answer
@@ -194,7 +194,7 @@ async def check_answer(
             orig_set = {tuple(sorted(p)) for p in original_pairs}
             is_correct = (user_set == orig_set)
 
-    # 4. Handle heart reduction if wrong
+    # Deduct a heart if answer is incorrect
     if not is_correct:
         progress.hearts = max(0, progress.hearts - 1)
         await db.commit()
@@ -214,7 +214,7 @@ async def complete_lesson(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # 1. Fetch lesson
+    # Fetch completed lesson record
     lesson_result = await db.execute(
         select(Lesson)
         .where(Lesson.id == id)
@@ -226,23 +226,23 @@ async def complete_lesson(
 
     skill = lesson.skill
 
-    # 2. Fetch user progress
+    # Load current user progress stats
     prog_result = await db.execute(select(UserProgress).where(UserProgress.user_id == current_user.id))
     progress = prog_result.scalar_one_or_none()
     if not progress:
         raise HTTPException(status_code=404, detail="User progress not found")
 
-    # 3. Calculate XP Earned
+    # Base reward is 10 XP, perfect run gets 5 XP bonus
     base_xp = 10
     is_perfect = (req.mistakes == 0)
     bonus_xp = 5 if is_perfect else 0
     total_xp_earned = base_xp + bonus_xp
 
-    # 4. Update user progress stats
+    # Apply rewards to user stats
     progress.total_xp += total_xp_earned
     progress.xp_today += total_xp_earned
 
-    # Update streak using compute_streak pure service
+    # Recalculate user streak stats
     today = datetime.date.today()
     new_streak, was_streak_incremented = compute_streak(
         progress.last_activity_date, 
@@ -255,7 +255,7 @@ async def complete_lesson(
         if new_streak > progress.longest_streak:
             progress.longest_streak = new_streak
 
-    # 5. Update leaderboard weekly XP
+    # Update total XP for the weekly leaderboard
     leaderboard_result = await db.execute(
         select(LeaderboardEntry).where(LeaderboardEntry.user_id == current_user.id)
     )
@@ -263,7 +263,7 @@ async def complete_lesson(
     if lb_entry:
         lb_entry.xp_this_week += total_xp_earned
 
-    # 6. Update user skill progress
+    # Retrieve or create progress record for the skill
     usp_result = await db.execute(
         select(UserSkillProgress)
         .where(UserSkillProgress.user_id == current_user.id, UserSkillProgress.skill_id == skill.id)
@@ -277,14 +277,14 @@ async def complete_lesson(
     usp.lessons_completed += 1
     usp.last_practiced_at = datetime.datetime.utcnow()
 
-    # Mark as completed if all lessons completed
+    # If the user completed all lessons in this skill, unlock subsequent skills
     if usp.lessons_completed >= skill.total_lessons:
         if usp.status != "completed":
             usp.status = "completed"
             usp.crowns = min(5, usp.crowns + 1)
             crowns_earned = 1
             
-            # Unlock cascade: Unlock all skills that list this skill as a required_skill_id
+            # Unlock dependency cascade
             unlocked_skills_result = await db.execute(
                 select(Skill).where(Skill.required_skill_id == skill.id)
             )
@@ -305,12 +305,11 @@ async def complete_lesson(
             if usp.lessons_completed > skill.total_lessons:
                 usp.lessons_completed = skill.total_lessons
 
-    # 7. Check Achievements
+    # Run check for newly earned achievements
     new_achievements = []
     achievements_result = await db.execute(select(Achievement))
     all_achievements = achievements_result.scalars().all()
 
-    # Fetch currently earned achievement codes
     earned_result = await db.execute(
         select(UserAchievement).where(UserAchievement.user_id == current_user.id)
     )
@@ -331,7 +330,7 @@ async def complete_lesson(
                 db.add(ua)
                 new_achievements.append(ach)
 
-    # 8. Record lesson attempt
+    # Save details of the lesson attempt for user history
     attempt = LessonAttempt(
         user_id=current_user.id,
         lesson_id=id,
