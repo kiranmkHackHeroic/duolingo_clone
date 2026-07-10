@@ -1,0 +1,23 @@
+# Python
+backend/.venv/
+backend/__pycache__/
+backend/*.pyc
+backend/*.pyo
+backend/*.pyd
+backend/.pytest_cache/
+backend/duolingo.db
+backend/duolingo.db-wal
+backend/duolingo.db-shm
+
+# Next.js / Node
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.vercel/
+
+# OS / Environments
+.DS_Store
+.env
+.env.local
+.env.production
