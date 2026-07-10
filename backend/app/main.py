@@ -19,6 +19,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def root():
+    return {"status": "ok", "message": "Duolingo API is running"}
+
+@app.get("/health")
 @app.get("/api/health")
 def health_check():
     return {"status": "ok", "message": "Duolingo API is healthy"}
