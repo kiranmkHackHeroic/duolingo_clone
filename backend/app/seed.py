@@ -25,7 +25,7 @@ async def seed_data():
         await session.commit()
 
         print("Seeding Course, Units, and Skills...")
-        # 1. Course
+        # Core language courses supported by the application
         spanish_course = Course(
             id=1,
             name="Spanish",
@@ -34,7 +34,7 @@ async def seed_data():
         )
         session.add(spanish_course)
 
-        # 2. Units
+        # Course unit breakdown structures
         unit1 = Unit(
             id=1,
             course_id=1,
@@ -61,7 +61,7 @@ async def seed_data():
         )
         session.add_all([unit1, unit2, unit3])
 
-        # 3. Skills
+        # Skills grouped by their units
         # Unit 1 Skills
         greetings_skill = Skill(
             id=1,
@@ -223,7 +223,7 @@ async def seed_data():
         session.add_all([de_ex1, de_ex2])
         await session.flush()
 
-        # 4. Lessons & Exercises for Greetings (Skill 1)
+        # Lessons and exercises for learning paths
         print("Seeding Lessons and Exercises...")
         
         # Skill 1, Lesson 1
@@ -248,7 +248,7 @@ async def seed_data():
 
         # Exercises for Greetings, Lesson 1
         exercises = [
-            # 1. Multiple Choice
+            # Translate text option selection
             Exercise(
                 id=1,
                 lesson_id=1,
@@ -258,7 +258,7 @@ async def seed_data():
                 data={"options": ["hola", "adiós", "gracias", "por favor"], "media": None},
                 correct_answer={"index": 0}
             ),
-            # 2. Fill in the blank
+            # Missing word matching prompt
             Exercise(
                 id=2,
                 lesson_id=1,
@@ -271,7 +271,7 @@ async def seed_data():
                 },
                 correct_answer={"answer": "estás"}
             ),
-            # 3. Translate / Type Answer
+            # Direct translation input prompt
             Exercise(
                 id=3,
                 lesson_id=1,
@@ -281,7 +281,7 @@ async def seed_data():
                 data={"source_text": "Good morning", "source_lang": "en"},
                 correct_answer={"accepted": ["buenos días", "buen día"]}
             ),
-            # 4. Word Bank
+            # Reorder words selection prompt
             Exercise(
                 id=4,
                 lesson_id=1,
@@ -294,7 +294,7 @@ async def seed_data():
                 },
                 correct_answer={"sequence": ["gracias"]}
             ),
-            # 5. Match Pairs
+            # Text matching associations prompt
             Exercise(
                 id=5,
                 lesson_id=1,
@@ -493,7 +493,7 @@ async def seed_data():
         session.add_all(exercises_other)
         await session.flush()
 
-        # 5. Achievements
+        # Badges and achievements for users
         print("Seeding Achievements...")
         ach1 = Achievement(
             id=1,
@@ -522,7 +522,7 @@ async def seed_data():
         session.add_all([ach1, ach2, ach3])
         await session.flush()
 
-        # 6. Users (Real User + Competitors)
+        # Real user profiles and competitive mock profiles for leaderboard comparison
         print("Seeding Users and UserProgress...")
         real_user = User(
             id=1,
