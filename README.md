@@ -1,12 +1,12 @@
 # Duolingo Web App Clone
 
-A full-stack clone of Duolingo's web app that implements the **learning path**, **lesson player**, and **gamification loop** (XP, streak, hearts, gems, leaderboard).
+A full-stack clone of Duolingo's web app that implements the **learning path**, **lesson player**, and **gamification loop** (XP, streak, hearts, gems, leaderboard) alongside multiple courses and full user authentication.
 
 ## 🚀 Tech Stack
 
-- **Frontend**: Next.js 14+ (App Router), TypeScript, Tailwind CSS, Zustand (state management), Framer Motion (micro-animations), Lucide Icons, canvas-confetti.
-- **Backend**: FastAPI (Python 3.14+), Uvicorn, Pydantic v2 (data validation).
-- **Database**: SQLite with SQLAlchemy (async) and Alembic (migrations).
+- **Frontend**: Next.js 16 (App Router), TypeScript, Tailwind CSS, Zustand (state management), Framer Motion (micro-animations), Lucide Icons, canvas-confetti.
+- **Backend**: FastAPI (Python 3.13+), Uvicorn, Pydantic v2.
+- **Database**: SQLite with SQLAlchemy (async aiosqlite) and Alembic (migrations). Enabled with WAL (Write-Ahead Logging) mode and connection optimizations for production concurrency.
 - **Package Managers**: `npm` (frontend) and `uv` (fast Python packages).
 
 ---
@@ -18,7 +18,7 @@ The app is split into a Next.js client-side application and a FastAPI stateless 
 ```
 [ Next.js Frontend (Port 3000) ]
         │         ▲
-        │ Fetch   │ Response
+        │ Fetch   │ Response (Bearer JWT Token)
         ▼         │
 [ FastAPI Backend (Port 8000) ]
         │         ▲
@@ -27,8 +27,8 @@ The app is split into a Next.js client-side application and a FastAPI stateless 
 [ SQLite Database (duolingo.db) ]
 ```
 
-- **Frontend**: Reusable, modular UI components styling thick 3D buttons (`Button.tsx`) and alternating zigzag paths with SVG dotted lines. Zustand store coordinates optimistic updates for hearts, XP, and gems.
-- **Backend**: Serves endpoints, Normalizes/checks text inputs for translations, decrements hearts on database write, and triggers unlock cascades.
+- **Frontend**: Reusable, modular UI components styling thick 3D buttons (`Button.tsx`) and alternating zigzag paths with SVG dotted lines. Zustand store coordinates optimistic updates for hearts, XP, and gems. Uses Next.js middleware to automatically redirect unauthenticated users to the login screen.
+- **Backend**: Serves endpoints, validates JWT credentials, normalizes/checks text inputs for translations, decrements hearts on database write, and triggers unlock cascades.
 
 ---
 
@@ -50,47 +50,39 @@ erDiagram
     User ||--o{ LeaderboardEntry : ranks
 ```
 
-### Table Details
-
-1. **Course**: Spanish metadata (id, name, flag emoji).
-2. **Unit**: Sections of the course containing skills.
-3. **Skill**: Sub-sections of a Unit requiring completion of previous skills (`required_skill_id` self-referential foreign key).
-4. **Lesson**: Contains a series of exercises to complete.
-5. **Exercise**: Contains lesson question prompt, type (`multiple_choice`, `translate`, `fill_blank`, `word_bank`, `match_pairs`), options list JSON, and correct answer JSON.
-6. **User**: Simple user registry (id, username, display name, avatar URL).
-7. **UserProgress**: Tracks live stats (total XP, current streak, gems balance, hearts balance).
-8. **UserSkillProgress**: Tracks individual user mastery (completed lessons count, crowns count, status of unlock).
-9. **LessonAttempt**: Audit logging on lesson completion.
-10. **Achievement**: Criteria guidelines (Sage, Wildfire, Superstar).
-11. **UserAchievement**: Maps earned badges to user.
-12. **LeaderboardEntry**: Week-specific standings.
-
 ---
 
 ## 🔌 API Overview
 
-### 1. Learning Path
-- **`GET /api/path`** -> Returns course unit tree, mapping lock/unlock states dynamically based on prerequisites.
+### 1. Authentication
+- **`POST /api/auth/register`** -> Create user account, setup default starter stats, and issue session JWT token.
+- **`POST /api/auth/login`** -> Verify password hash and return JWT session token.
 
-### 2. User Stats
-- **`GET /api/progress`** -> Fetch current user progress.
+### 2. Languages / Courses
+- **`GET /api/courses`** -> Fetch available language courses (Spanish, French, German).
+- **`POST /api/courses/select`** -> Choose active language course and initialize starter skill progresses for it.
+
+### 3. Learning Path
+- **`GET /api/path`** -> Returns current active course unit tree, mapping lock/unlock states dynamically based on prerequisites.
+
+### 4. User Stats & Progress
+- **`GET /api/progress`** -> Fetch current user progress metrics.
 - **`POST /api/progress/hearts/refill`** -> Refill hearts to 5 (costs 100 gems).
-- **`GET /api/progress/streak`** -> Detailed streak analytics.
 
-### 3. Lesson Player
-- **`GET /api/skills/{skill_id}/lesson`** -> Generates and returns a lesson containing a list of exercises. **Omit `correct_answer`** to prevent client-side cheat leaks.
+### 5. Lesson Player
+- **`GET /api/skills/{skill_id}/lesson`** -> Generates and returns a lesson containing a list of exercises. Omit `correct_answer` to prevent client-side cheat leaks.
 - **`POST /api/exercises/{id}/answer`** -> Submits user answer. Normalizes inputs server-side. Decrements hearts if wrong. Returns correct answer if failed.
 - **`POST /api/lessons/{id}/complete`** -> Saves lesson score, increments crowns, streak, and checks/saves earned achievements.
 
-### 4. Leaderboard & Profile
-- **`GET /api/leaderboard`** -> Leaderboard rankings.
-- **`GET /api/profile`** -> Fetch statistics card and achievements.
+### 6. Leaderboard & Profile
+- **`GET /api/leaderboard`** -> Leaderboard standings.
+- **`GET /api/profile`** -> Fetch stats summary and grid of earned achievement badges.
 
 ---
 
 ## 🛠️ Setup Instructions
 
-Ensure you have **Python 3.11+**, **Node.js 18+**, and **uv** installed.
+Ensure you have **Python 3.11+** and **Node.js 18+** installed.
 
 ### 1. Backend Setup
 ```bash
@@ -98,19 +90,19 @@ Ensure you have **Python 3.11+**, **Node.js 18+**, and **uv** installed.
 cd backend
 
 # Create virtual environment and install dependencies
-uv venv
+python3 -m venv .venv
 source .venv/bin/activate
-uv pip install -r requirements.txt
-uv pip install greenlet
+pip install -r requirements.txt
+pip install greenlet
 
 # Apply database migrations
-.venv/bin/alembic upgrade head
+alembic upgrade head
 
 # Seed the database
-.venv/bin/python -m app.seed
+python -m app.seed
 
 # Start the development server
-.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 ### 2. Frontend Setup
@@ -135,8 +127,7 @@ PYTHONPATH=. .venv/bin/pytest
 
 ---
 
-## 📋 Assumptions & Functional Scopes
+## 🌐 Production Deployment
 
-- **Single User Auth**: Hardcoded user session for `user_id = 1` (`duo_learner`).
-- **Hearts refills**: Mocked to cost 100 gems, falling back to free if user has fewer.
-- **SQLite Deployment**: Database runs locally. On ephemeral hosting environments, DB resets on restart. Tradeoff chosen to keep installation lightweight and self-contained.
+- **Backend (Render)**: [https://duolingo-clone-k15v.onrender.com](https://duolingo-clone-k15v.onrender.com)
+- **Frontend (Vercel)**: Connects to the backend via `NEXT_PUBLIC_API_URL`.
